@@ -11,7 +11,9 @@ auto add(int a, int b) -> int {
 }
 
 
-
+class A {
+public:
+};
 
 int main() {
 
@@ -32,6 +34,9 @@ int main() {
     std::cout << "ans is " << ans.get() << std::endl;
 
     std::cout << *"123" << std::endl;
+
+    auto a = new A();
+    pool.commit(a,1,2,3);
 
 
     return 0;
