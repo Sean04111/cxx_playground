@@ -30,6 +30,7 @@ using Exception_Types  = std::string;
 Exception_Types SEND_CLOSED_CHAN = "Send to a closed channel";
 Exception_Types CLOSE_CLOSED_CHAN = "Close a closed channel";
 
+
 /* Channel declaration */
 #define DEFAULT_CHANNEL_CAP  10;
 
@@ -98,7 +99,9 @@ public:
              *  2. closed
              */
             _send_cond.wait(lock, [this]()-> bool {
-                return (_cap.load() == 0 && _queue.empty() )||( _queue.size() < _cap.load() )|| _closed.load();
+                return (_cap.load() == 0 && _queue.empty() )||
+                        _queue.size() < _cap.load() ||
+                            _closed.load();
             });
 
             if (_closed.load()) {
@@ -114,16 +117,18 @@ public:
     void receive(T& msg) {
         /* check if closed */
         if (_closed.load()) {
-            throw nullptr;
+            return;
         }
         {
             std::unique_lock<std::mutex> lock (_mu);
             _recv_cond.wait(lock, [this]() -> bool {
+                std::cout << "receive thread waiting for message " << std::endl;
                return !_queue.empty() || _closed.load();
             });
 
             if (_closed.load()) {
-                throw nullptr;
+                std::cout << "got channel closed" << std::endl;
+                return;
             }
 
             msg = _queue.front();
@@ -131,11 +136,20 @@ public:
             _send_cond.notify_one();
         }
     };
+    /* close will notify all blocked thread */
     void close() {
-
+        if (_closed.load()) {
+            throw Channel_Exception(CLOSE_CLOSED_CHAN);
+        }
+        _closed.store(true);
+        _recv_cond.notify_all();
+        _send_cond.notify_all();
     };
-    ~Channel() {
 
+    ~Channel() {
+        if (!_closed.load()) {
+            close();
+        }
     };
 };
 
