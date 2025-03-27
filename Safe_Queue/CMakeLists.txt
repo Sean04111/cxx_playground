@@ -7,5 +7,5 @@ project(Safe_Stack)
 add_executable(
         main
         main.cpp
-        threadsafe_stack.hpp
+        threadsafe_queue.hpp
 )
