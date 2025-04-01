@@ -2,6 +2,7 @@
 // Created by Sean on 4/1/25.
 //
 
+#pragma once
 #ifndef LOCK_FREE_STACK_HPP
 #define LOCK_FREE_STACK_HPP
 #include <atomic>
