@@ -1,15 +1,26 @@
-//
-// Created by Sean on 3/27/25.
-//
-
-#include "threadsafe_queue.hpp"
+#include <atomic>
+#include <thread>
 #include <iostream>
 
-int main() {
-    threadsafe_queue<int> q{};
-    q.push(1);
-    auto p =  q.wait_and_pop();
-    std::cout << *p << std::endl;
 
+class spin_lock {
+private:
+    std::atomic_flag flag;
+public:
+    spin_lock(): flag(ATOMIC_FLAG_INIT) {};
+
+    void lock() {
+        while (flag.test_and_set(std::memory_order_acquire));
+    }
+
+    void unlock() {
+        flag.clear(std::memory_order_release);
+    }
+};
+
+int main() {
+    std::atomic<spin_lock*> lock{};
+    std::cout << lock.is_lock_free() << std::endl;
     return 0;
 }
+

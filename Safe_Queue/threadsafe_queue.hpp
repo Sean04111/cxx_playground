@@ -5,74 +5,57 @@
 #ifndef THREADSAFE_QUEUE_HPP
 #define THREADSAFE_QUEUE_HPP
 
-#include <queue>
-
-
 template <typename T>
 class threadsafe_queue {
 private:
-    std::mutex _mu;
-    std::queue<T> _queue;
-    std::condition_variable _pop_cond;
-public:
-    threadsafe_queue() {};
-
-    threadsafe_queue(const threadsafe_queue& other) {
-        std::lock_guard<std::mutex> lock(other._mu);
-        _queue = other._queue;
+    struct node {
+        std::shared_ptr<T> data;
+        std::unique_ptr<node> next;
     };
+    std::mutex head_mutex;
+    std::unique_ptr<node> head;
+    std::mutex tail_mutex;
+    node* tail;
 
-    void push(const T& value) {
-        std::lock_guard<std::mutex> lock (_mu);
-        _queue.push(value);
-        _pop_cond.notify_one();
+    node* get_tail() {
+        std::lock_guard<std::mutex> lock(tail_mutex);
+        return tail;
     }
 
-    void wait_and_pop(T& value) {
-        std::unique_lock<std::mutex> lock(_mu);
-        _pop_cond.wait(lock, [&] () -> bool {
-            return !_queue.empty();
-        });
-        value = _queue.front();
-        _queue.pop();
-    }
+    std::unique_ptr<node> pop_head() {
+        std::lock_guard<std::mutex> lock(head_mutex);
 
-    std::shared_ptr<T> wait_and_pop() {
-        std::unique_lock<std::mutex> lock(_mu);
-        _pop_cond.wait(lock, [&] () -> bool {
-            return !_queue.empty();
-        });
-
-        std::shared_ptr<T> res = std::make_shared<T>(_queue.front());
-        _queue.pop();
-        return res;
-    }
-
-    bool try_pop(T &value) {
-        std::lock_guard<std::mutex> lock(_mu);
-        if (_queue.empty()) {
-            return false;
-        }else {
-            value = _queue.front();
-            _queue.pop();
-            return true;
+        if (head.get() == get_tail()) {
+            return nullptr;
         }
+
+        std::unique_ptr<node> old_head = std::move(head);
+        head = std::move(old_head->next);
+        return old_head;
     }
+
+public:
+    threadsafe_queue():head(new node), tail(head.get()){};
+
+    threadsafe_queue(const threadsafe_queue & other) = delete;
+    threadsafe_queue & operator=(const threadsafe_queue & other) = delete;
 
     std::shared_ptr<T> try_pop() {
-        std::lock_guard<std::mutex> lock(_mu);
-        if (_queue.empty()) {
-            return std::shared_ptr<T>();
-        }else {
-            std::shared_ptr<T> res = std::make_shared<T>(_queue.front());
-            _queue.pop();
-            return res;
-        }
+        std::unique_ptr<node> old_head = pop_head();
+        return old_head? old_head->data : std::shared_ptr<T>();
     }
 
-    bool empty() const {
-        std::lock_guard<std::mutex> lock(_mu);
-        return _queue.empty();
+    void push(T new_value) {
+        std::shared_ptr<T> new_data(
+            std::make_shared<T>(std::move(new_value)));
+
+        std::unique_ptr<node> p(new node);
+
+        node* const new_tail = p.get();
+        std::lock_guard<std::mutex> lock(tail_mutex);
+        tail->data = new_data;
+        tail->next = std::move(p);
+        tail = new_tail;
     }
 };
 
